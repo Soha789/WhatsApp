@@ -1,111 +1,157 @@
+<?php require_once "config.php"; ?>
 <?php
-require_once 'config.php';
+// Handle signup POST
+$signup_error = "";
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action']==='signup') {
+    $name  = trim($_POST['name'] ?? "");
+    $email = trim($_POST['email'] ?? "");
+    $pass  = $_POST['password'] ?? "";
 
-// Handle AJAX signup POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action']) && $_GET['action'] === 'signup') {
-    header('Content-Type: application/json');
-    $username = trim($_POST['username'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-
-    if ($username === '' || $password === '') {
-        echo json_encode(['ok' => false, 'error' => 'Username and password are required.']);
-        exit;
-    }
-
-    try {
-        $pdo = db();
-        // unique username
-        $exists = $pdo->prepare("SELECT id FROM users WHERE username = ?");
-        $exists->execute([$username]);
-        if ($exists->fetch()) {
-            echo json_encode(['ok' => false, 'error' => 'Username already taken.']);
-            exit;
+    if ($name === "" || $email === "" || $pass === "") {
+        $signup_error = "All fields are required.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $signup_error = "Invalid email format.";
+    } else {
+        // Check email unique
+        $stmt = $mysqli->prepare("SELECT id FROM users WHERE email=? LIMIT 1");
+        $stmt->bind_param("s", $email);
+        $stmt->execute(); $stmt->store_result();
+        if ($stmt->num_rows > 0) {
+            $signup_error = "Email already registered. Please login.";
         }
+        $stmt->close();
 
-        // generate unique random 10-digit phone-like number (not starting with 0)
-        do {
-            $phone = (string)random_int(1000000000, 9999999999);
-            $chk = $pdo->prepare("SELECT id FROM users WHERE phone_number = ?");
-            $chk->execute([$phone]);
-        } while ($chk->fetch());
-
-        $hash = password_hash($password, PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, phone_number, created_at, last_seen) VALUES (?, ?, ?, NOW(), NOW())");
-        $stmt->execute([$username, $hash, $phone]);
-
-        echo json_encode(['ok' => true, 'phone_number' => $phone, 'message' => 'Signup successful.']);
-    } catch (Exception $e) {
-        echo json_encode(['ok' => false, 'error' => 'Server error: '.$e->getMessage()]);
+        if ($signup_error === "") {
+            $hash = password_hash($pass, PASSWORD_DEFAULT);
+            $user_number = random_user_number($mysqli);
+            $stmt = $mysqli->prepare("INSERT INTO users (name,email,password_hash,user_number,created_at) VALUES (?,?,?,?,NOW())");
+            $stmt->bind_param("ssss", $name, $email, $hash, $user_number);
+            if ($stmt->execute()) {
+                // Auto-login and JS redirect (no PHP header redirects)
+                $_SESSION['user_id'] = $stmt->insert_id;
+                $_SESSION['user_name'] = $name;
+                $_SESSION['user_number'] = $user_number;
+                echo '<!doctype html><html><head><meta charset="utf-8"><script>setTimeout(()=>{window.location.href="chat.php";},400);</script></head><body>Signing you in…</body></html>';
+                exit;
+            } else {
+                $signup_error = "Signup failed: " . $mysqli->error;
+            }
+            $stmt->close();
+        }
     }
-    exit;
 }
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Sign Up — GreenChat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8">
+<title>WhatsApp Clone – Signup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  :root { --green:#16a34a; --green-d:#15803d; --green-ll:#eaffe6; --white:#fff; --ink:#0b1f14; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background: var(--green-ll); color: var(--ink); }
-  .wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-  .card {
-    width: 100%; max-width: 460px; background: var(--white); border: 2px solid var(--green);
-    border-radius: 16px; box-shadow: 0 10px 30px rgba(22,163,74,0.15); padding: 24px;
-  }
-  h1 { margin: 0 0 12px; color: var(--green-d); }
-  p.sub { margin: 0 0 24px; color:#173b20 }
-  label { display:block; font-weight:600; margin: 12px 0 6px; }
-  input[type="text"], input[type="password"] {
-    width:100%; padding:12px 14px; border-radius:12px; border:2px solid var(--green);
-    background:#f8fff8; outline:none; transition:.2s border;
-  }
-  input:focus { border-color: var(--green-d); }
-  button {
-    margin-top:16px; width:100%; padding:12px 14px; border-radius:12px; border:0;
-    background: var(--green); color:var(--white); font-weight:700; cursor:pointer; transition:.2s transform, .2s background;
-  }
-  button:hover { background: var(--green-d); transform: translateY(-1px); }
-  .note { margin-top:12px; font-size:14px; }
-  .msg { margin-top:16px; padding:12px; border-radius:12px; background:#ecffef; border:1px solid var(--green); display:none; }
-  a { color: var(--green-d); font-weight:700; text-decoration: none; }
+:root {
+  --green: #12a150;
+  --green-600:#0f8c45;
+  --green-700:#0c7539;
+  --green-100:#e9f7ef;
+  --white: #ffffff;
+  --text: #0a0f0d;
+  --muted:#4a5b52;
+  --ring: #bde5cc;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;
+  background:linear-gradient(135deg,var(--green-100),var(--white));
+  color:var(--text);
+  min-height:100vh; display:grid; place-items:center;
+}
+.card{
+  background:var(--white); width:min(720px,94vw); border-radius:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.08); overflow:hidden; border:1px solid var(--ring);
+}
+.header{
+  background:linear-gradient(90deg,var(--green),var(--green-700));
+  color:var(--white); padding:22px 24px; display:flex; align-items:center; gap:12px;
+}
+.header .logo{
+  width:42px; height:42px; border-radius:12px; background:var(--white);
+  display:grid;place-items:center;color:var(--green-700); font-weight:800;
+}
+.header h1{font-size:20px; margin:0}
+.content{padding:26px}
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+label{font-size:12px; color:var(--muted); display:block; margin-bottom:6px}
+input{
+  width:100%; padding:12px 14px; border-radius:12px; border:1px solid #dbe7df;
+  outline:none; transition:box-shadow .2s,border-color .2s; font-size:15px;
+}
+input:focus{border-color:var(--green); box-shadow:0 0 0 4px rgba(18,161,80,.15)}
+.btn{
+  background:var(--green); color:var(--white); padding:12px 16px; border:none; border-radius:12px;
+  font-weight:600; cursor:pointer; transition:transform .06s ease, background .2s; width:100%;
+}
+.btn:hover{background:var(--green-600)}
+.btn:active{transform:translateY(1px)}
+.row{display:flex; gap:14px; align-items:center}
+.error{
+  background:#fff5f5; color:#b00020; border:1px solid #ffd7d7; padding:12px 14px; border-radius:12px; margin:10px 0 0;
+}
+.note{font-size:12px; color:var(--muted); margin-top:10px}
+.link{color:var(--green-700); text-decoration:none; font-weight:600}
+.footer{
+  background:#f6fbf8; padding:14px 24px; display:flex; justify-content:space-between; color:var(--muted); font-size:12px
+}
+@media (max-width:720px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
-<div class="wrap">
   <div class="card">
-    <h1>Create Account</h1>
-    <p class="sub">Green & white WhatsApp-style clone • Your number is assigned automatically.</p>
-    <form id="signupForm">
-      <label>Username</label>
-      <input type="text" name="username" placeholder="e.g., soha11" required />
-      <label>Password</label>
-      <input type="password" name="password" placeholder="Choose a strong password" required />
-      <button type="submit">Sign Up</button>
-      <div class="msg" id="msg"></div>
-      <p class="note">Already have an account? <a href="login.php">Log in</a></p>
-    </form>
+    <div class="header">
+      <div class="logo">WA</div>
+      <div>
+        <h1>Create your account</h1>
+        <div style="opacity:.9;font-size:13px">Green & white theme • No external files • JS redirects</div>
+      </div>
+    </div>
+    <div class="content">
+      <form method="post" id="signupForm">
+        <input type="hidden" name="action" value="signup">
+        <div class="grid">
+          <div>
+            <label>Full name</label>
+            <input name="name" placeholder="e.g., Soha Khan" required>
+          </div>
+          <div>
+            <label>Email</label>
+            <input name="email" type="email" placeholder="you@example.com" required>
+          </div>
+        </div>
+        <div class="grid" style="margin-top:10px">
+          <div>
+            <label>Password</label>
+            <input name="password" type="password" placeholder="••••••••" required>
+          </div>
+          <div class="row" style="align-items:flex-end">
+            <button class="btn" type="submit" id="btnSignup">Create account</button>
+          </div>
+        </div>
+      </form>
+      <?php if($signup_error): ?>
+        <div class="error"><?= htmlspecialchars($signup_error) ?></div>
+      <?php endif; ?>
+      <div class="note">Already have an account?
+        <a class="link" href="login.php">Login</a>
+      </div>
+    </div>
+    <div class="footer">
+      <div>Tip: Each user gets a unique <b>user number</b> automatically at signup.</div>
+      <div>&copy; <?= date('Y') ?> WA Clone</div>
+    </div>
   </div>
-</div>
 <script>
-// JS: AJAX submit; JS-only redirect (no PHP header)
-const form = document.getElementById('signupForm');
-const msg = document.getElementById('msg');
-
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(form);
-  const res = await fetch('signup.php?action=signup', { method:'POST', body: fd });
-  const data = await res.json();
-  msg.style.display = 'block';
-  if (data.ok) {
-    msg.textContent = `✅ ${data.message} • Your number: ${data.phone_number}. Redirecting to login...`;
-    setTimeout(() => { window.location.href = 'login.php'; }, 1300); // JS redirect
-  } else {
-    msg.textContent = `❌ ${data.error || 'Failed'}`;
-  }
+// Optional: intercept submit to give quick feedback.
+document.getElementById('signupForm').addEventListener('submit', () => {
+  document.getElementById('btnSignup').textContent = 'Creating...';
 });
 </script>
 </body>
