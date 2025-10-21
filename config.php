@@ -1,42 +1,48 @@
 <?php
-// config.php — database connection + common helpers (no output)
-// Adjust $DB_HOST if your MySQL host differs.
-$DB_HOST = 'localhost';
-$DB_NAME = 'dbdpg0oxmtxzf7';
-$DB_USER = 'uwhgkspktdrxk';
-$DB_PASS = 'sqj7swh1bcio';
+// config.php
+// DB + Session bootstrap. Include in all other files (require_once).
+// NOTE: Keep this file PHP-only (no HTML output).
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-function db() {
-    static $pdo = null;
-    if ($pdo === null) {
-        global $DB_HOST, $DB_NAME, $DB_USER, $DB_PASS;
-        $dsn = "mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4";
-        $opts = [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ];
-        $pdo = new PDO($dsn, $DB_USER, $DB_PASS, $opts);
-    }
-    return $pdo;
+$DB_HOST = "localhost";
+$DB_USER = "ugfwxemowrehd";
+$DB_PASS = "cliigx0v0hca";
+$DB_NAME = "dbriviy7ozu1xo";
+
+$mysqli = new mysqli($DB_HOST, $DB_USER, $DB_PASS, $DB_NAME);
+if ($mysqli->connect_errno) {
+    http_response_code(500);
+    die("DB connection failed: " . $mysqli->connect_error);
 }
 
-function require_login_json() {
-    if (!isset($_SESSION['user_id'])) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => 'unauthorized']);
+// Helpers
+function json_response($data = [], $code = 200) {
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    exit;
+}
+
+function require_login() {
+    if (empty($_SESSION['user_id'])) {
+        echo '<script>window.location.href="login.php";</script>';
         exit;
     }
 }
 
-function current_user() {
-    if (!isset($_SESSION['user_id'])) return null;
-    $pdo = db();
-    $stmt = $pdo->prepare("SELECT id, username, phone_number, created_at, last_seen FROM users WHERE id=?");
-    $stmt->execute([$_SESSION['user_id']]);
-    return $stmt->fetch();
+function random_user_number($mysqli) {
+    // 9-digit random number, unique
+    do {
+        $n = strval(random_int(100000000, 999999999));
+        $stmt = $mysqli->prepare("SELECT id FROM users WHERE user_number=? LIMIT 1");
+        $stmt->bind_param("s", $n);
+        $stmt->execute();
+        $stmt->store_result();
+        $exists = $stmt->num_rows > 0;
+        $stmt->close();
+    } while ($exists);
+    return $n;
 }
