@@ -1,27 +1,17 @@
+<?php require_once "config.php"; ?>
 <?php
-require_once 'config.php';
-session_unset();
+// Destroy session and JS-redirect to login (no PHP header)
+$_SESSION = [];
+if (session_id() !== "" || isset($_COOKIE[session_name()])) {
+    setcookie(session_name(), '', time()-3600, '/');
+}
 session_destroy();
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>Logging out…</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Logging out…</title>
+<script>setTimeout(()=>{window.location.href="login.php";},300);</script>
 <style>
-  :root{ --green:#16a34a; --white:#fff; }
-  body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#edfff0; color:#0b1f14; }
-  .box{ min-height:100vh; display:grid; place-items:center; }
-  .card{ background:var(--white); border:2px solid var(--green); padding:24px; border-radius:16px; }
+body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;display:grid;place-items:center;min-height:100vh;background:linear-gradient(135deg,#e9f7ef,#fff);color:#0a0f0d}
+.box{background:#fff;border:1px solid #bde5cc;border-radius:12px;padding:18px 20px}
 </style>
-</head>
-<body>
-  <div class="box">
-    <div class="card">You’ve been logged out. Redirecting to login…</div>
-  </div>
-<script>
-  setTimeout(()=>{ window.location.href='login.php'; }, 800);
-</script>
-</body>
-</html>
+</head><body><div class="box">Logging you out…</div></body></html>
